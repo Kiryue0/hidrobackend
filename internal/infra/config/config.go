@@ -93,27 +93,49 @@ func Load() (*Config, error) {
 
 	// Railway / prod ortam değişkenleri: viper AutomaticEnv tutarsız olabiliyor,
 	// bu yüzden kritik değişkenleri doğrudan os.Getenv ile okuyup varsayılanı eziyoruz.
-	if v := os.Getenv("DATABASE_URL"); v != "" {
+	if v := cleanEnv("DATABASE_URL"); v != "" {
 		cfg.DatabaseURL = v
 	}
-	if v := os.Getenv("PORT"); v != "" {
+	if v := cleanEnv("PORT"); v != "" {
 		cfg.HTTPPort = v
 	}
-	if v := os.Getenv("MQTT_BROKER"); v != "" {
+	if v := cleanEnv("MQTT_BROKER"); v != "" {
 		cfg.MQTTBroker = v
 	}
-	if v := os.Getenv("MQTT_USERNAME"); v != "" {
+	if v := cleanEnv("MQTT_USERNAME"); v != "" {
 		cfg.MQTTUsername = v
 	}
-	if v := os.Getenv("MQTT_PASSWORD"); v != "" {
+	if v := cleanEnv("MQTT_PASSWORD"); v != "" {
 		cfg.MQTTPassword = v
 	}
-	if v := os.Getenv("MQTT_CLIENT_ID"); v != "" {
+	if v := cleanEnv("MQTT_CLIENT_ID"); v != "" {
 		cfg.MQTTClientID = v
 	}
-	if v := os.Getenv("JWT_SECRET"); v != "" {
+	if v := cleanEnv("JWT_SECRET"); v != "" {
 		cfg.JWTSecret = v
 	}
+	// Panel kopyala-yapıştır kalıntılarına karşı viper'dan gelenler de temizlenir.
+	cfg.MQTTBroker = trimQuotes(cfg.MQTTBroker)
 
 	return &cfg, nil
+}
+
+// cleanEnv ortam değişkenini kopyala-yapıştır kalıntılarından arındırarak okur:
+// baş/son boşluk-satır sonu ve sarmalayan tırnaklar URL parse'ı sessizce bozuyor
+// (paho "no servers defined to connect to").
+func cleanEnv(key string) string {
+	return trimQuotes(os.Getenv(key))
+}
+
+func trimQuotes(v string) string {
+	v = strings.TrimSpace(v)
+	for len(v) >= 2 {
+		first, last := v[0], v[len(v)-1]
+		if (first == '"' && last == '"') || (first == '\'' && last == '\'') {
+			v = strings.TrimSpace(v[1 : len(v)-1])
+			continue
+		}
+		break
+	}
+	return v
 }
