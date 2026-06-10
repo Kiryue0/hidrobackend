@@ -127,6 +127,19 @@
   .node{transition:filter .2s}
 
   /* ---- Confirm dialog ---- */
+  /* toast bildirimleri */
+  #toasts{position:fixed;top:16px;right:16px;z-index:200;display:flex;flex-direction:column;gap:8px;max-width:380px}
+  .toast{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--blue);border-radius:10px;
+        padding:12px 14px;box-shadow:0 8px 24px rgba(0,0,0,.5);font-size:13px;line-height:1.45;
+        transition:opacity .3s;animation:toastIn .25s ease}
+  .toast.warn{border-left-color:var(--orange)} .toast.err{border-left-color:var(--red)} .toast.ok{border-left-color:var(--green)}
+  @keyframes toastIn{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:none}}
+  /* test modu */
+  .test-badge{display:inline-flex;align-items:center;gap:6px;background:rgba(245,158,11,.12);color:var(--orange);
+        border:1px solid var(--orange);border-radius:999px;padding:6px 14px;font-size:12px;font-weight:700;
+        animation:testPulse 1.6s ease-in-out infinite}
+  @keyframes testPulse{50%{opacity:.55}}
+  .hint{color:var(--muted);font-size:12px;margin:6px 0;line-height:1.5}
   .overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100;
         display:flex;align-items:center;justify-content:center}
   .confirm-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
@@ -209,6 +222,26 @@
       </div>
 
       <div class="section">
+        <h3>🔬 Test Modu (Sahte Telemetri)</h3>
+        <p class="hint">Sunum/test icin sahte sicaklik-nem uretir. Veri <b>gercek hattan</b> akar
+           (MQTT → Backend → DB → WebSocket): grafik, esik uyarilari ve cihaz ekrani ayni gercek veri gibi tepki verir.
+           Kapatinca normal moda donulur, gercek sensor akisi etkilenmez.</p>
+        <div class="grid2">
+          <div class="f"><label>Sahte Sicaklik: <b id="ft-tv" style="color:var(--accent)">25.0</b> °C</label>
+            <input id="ft-t" type="range" min="0" max="50" step="0.5" value="25"
+                   oninput="$('ft-tv').textContent=this.value;testChanged()"></div>
+          <div class="f"><label>Sahte Nem: <b id="ft-hv" style="color:var(--accent)">60</b> %</label>
+            <input id="ft-h" type="range" min="0" max="100" step="1" value="60"
+                   oninput="$('ft-hv').textContent=this.value;testChanged()"></div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap">
+          <button class="save-btn" id="testBtn" style="margin-top:0;width:auto;padding:10px 18px"
+                  onclick="toggleTestMode()">🔬 Test Modunu Baslat</button>
+          <span id="testBadge" class="test-badge hidden">🧪 TEST MODU AKTIF — veriler sahte</span>
+        </div>
+      </div>
+
+      <div class="section">
         <h3>🧪 Esik & Mod Yapilandirmasi (UpdateCabinConfig)</h3>
         <div class="grid2">
           <div class="f"><label>Sicaklik Min</label><input id="cf-tmin" class="inp" type="number" step="0.1"></div>
@@ -254,9 +287,9 @@
       <div class="panel-title">🏛️ Sistem Mimarisi & Canli Veri Akisi <span class="tag">Hexagonal · DDD · CQRS</span></div>
       <div id="mermaid"></div>
       <div class="legend">
-        <span><i class="lg" style="background:var(--green)"></i> Telemetri (ESP→Broker→Backend)</span>
-        <span><i class="lg" style="background:var(--blue)"></i> Asenkron DB kaydi</span>
-        <span><i class="lg" style="background:var(--orange)"></i> Komut/Config (UI→Backend→Broker→ESP)</span>
+        <span><i class="lg" style="background:var(--green)"></i> ①②③ Veri yukari: ESP32 → Broker → Backend (siradaki kutu parlar)</span>
+        <span><i class="lg" style="background:var(--blue)"></i> ④ Backend → PostgreSQL kaydi</span>
+        <span><i class="lg" style="background:var(--orange)"></i> ❶❷❸ Komut asagi: Panel → Backend → Broker → ESP32</span>
       </div>
       <ul class="arch-notes">
         <li><b>Hexagonal (Ports & Adapters):</b> Cekirdek domain dis dunyadan izole; MQTT, HTTP, WebSocket ve PostgreSQL birer <i>adapter</i> olarak port arayuzlerine baglanir.</li>
@@ -268,6 +301,8 @@
     </div>
   </div>
 </div>
+
+<div id="toasts"></div>
 
 <!-- Onay dialogu (hesap silme) -->
 <div id="confirmOverlay" class="overlay hidden">
@@ -292,6 +327,9 @@ let actuatorStates = {}; // son bilinen aktuator durumu (re-render icin)
 let ws = null;
 let chart = null;
 let pollTimer = null;
+let testMode = false, testTimer = null, testDebounce = null;
+let lastReading = {tds:1000, ph:6.0};   // sahte veri icin tds/ph dolgusu
+const notifyCooldown = {};              // ayni bildirimi 30 sn'de bir gosterme
 const RELAYS = [["HUMIDIFIER","Nemlendirici"],["HAVA_MOTORU","Su Pompasi"],["COB_LED","COB LED"]];
 const FANS   = [["FAN1","Fan 1"],["FAN2","Fan 2"]];
 
@@ -300,6 +338,41 @@ function show(v){["authView","waitView","dashView"].forEach(x=>$(x).classList.ad
   $(v).classList.remove("hidden"); $("topbar").classList.toggle("hidden", v==="authView");}
 function logEv(t,color){const l=$("evlog");const c={green:"#22c55e",blue:"#3b82f6",orange:"#f59e0b"}[color]||"#8aa0bd";
   const d=new Date().toLocaleTimeString();l.innerHTML=`<div style="color:${c}">[${d}] ${t}</div>`+l.innerHTML;}
+
+/* ---- toast bildirimleri ---- */
+function toast(msg,type="info",ms=6000){
+  const t=document.createElement("div");t.className="toast "+type;t.innerHTML=msg;
+  $("toasts").appendChild(t);
+  setTimeout(()=>{t.style.opacity="0";setTimeout(()=>t.remove(),300);},ms);
+}
+// cooled: ayni anahtarli bildirimi en erken 30 sn'de bir gecirir (spam onleme)
+function cooled(key){
+  const now=Date.now();
+  if(notifyCooldown[key] && now-notifyCooldown[key]<30000) return false;
+  notifyCooldown[key]=now; return true;
+}
+
+/* ---- esik kontrolu: gelen her olcum esiklerle karsilastirilir ---- */
+function checkThresholds(d){
+  if(!cabin||!cabin.thresholds) return;
+  const th=cabin.thresholds;
+  const checks=[
+    ["t",  d.t,  th.sicaklikMin, th.sicaklikMax, "Sicaklik", "°C"],
+    ["h",  d.h,  th.nemMin,      th.nemMax,      "Nem",      "%"],
+    ["ph", d.ph, th.phMin,       th.phMax,       "pH",       ""],
+    ["tds",d.tds,th.tdsMin,      th.tdsMax,      "TDS",      " ppm"],
+  ];
+  for(const [k,v,min,max,name,unit] of checks){
+    if(v===null||v===undefined) continue;
+    if(v>max && cooled("hi-"+k)){
+      toast(`⚠️ <b>${name} esigin USTUNDE:</b> ${fmt(v)}${unit} &nbsp;(max ${max}${unit})`,"warn");
+      logEv(`Esik asimi: ${name} = ${fmt(v)}${unit} > max ${max}${unit}`,"orange");
+    }else if(v<min && cooled("lo-"+k)){
+      toast(`⚠️ <b>${name} esigin ALTINDA:</b> ${fmt(v)}${unit} &nbsp;(min ${min}${unit})`,"warn");
+      logEv(`Esik asimi: ${name} = ${fmt(v)}${unit} < min ${min}${unit}`,"orange");
+    }
+  }
+}
 
 async function api(path,opts={}){
   opts.headers = Object.assign({"Content-Type":"application/json"}, opts.headers||{});
@@ -363,6 +436,7 @@ async function submitAuth(){
 function logout(){
   token=""; localStorage.removeItem("hidro_token");
   if(ws){ws.onclose=null;ws.close();ws=null;} if(pollTimer)clearInterval(pollTimer);
+  if(testTimer)clearInterval(testTimer);
   location.reload();
 }
 
@@ -461,6 +535,41 @@ async function sendFan(key,btn){
   }catch(e){ logEv("Komut hatasi: "+(e.body?.error||e.status),"orange"); }
 }
 
+/* ---- Test modu (sahte telemetri) ---- */
+async function sendTestReading(){
+  if(!cabin) return;
+  const t=parseFloat($("ft-t").value), h=parseFloat($("ft-h").value);
+  try{
+    await api(`/api/cabins/${cabin.id}/test`,{method:"POST",
+      body:JSON.stringify({enabled:true,t,h,tds:lastReading.tds??1000,ph:lastReading.ph??6})});
+    glowTest();
+  }catch(e){ logEv("Test verisi hatasi: "+(e.body?.error||e.status),"orange"); }
+}
+function testChanged(){ if(testMode){ clearTimeout(testDebounce); testDebounce=setTimeout(sendTestReading,400); } }
+async function toggleTestMode(){
+  if(!testMode){
+    testMode=true;
+    $("testBtn").textContent="↩️ Normal Moda Don"; $("testBadge").classList.remove("hidden");
+    toast("🧪 <b>Test modu acildi.</b> Surgulerle sahte sicaklik/nem uretin; esik uyarilari ve cihaz ayni gercek veri gibi tepki verir.","warn");
+    logEv("TEST MODU acildi (sahte telemetri)","orange");
+    await sendTestReading();
+    testTimer=setInterval(sendTestReading,5000); // cihaz gibi 5 sn'de bir uret
+  }else{
+    stopTestMode(true);
+  }
+}
+async function stopTestMode(notify){
+  testMode=false;
+  if(testTimer){clearInterval(testTimer);testTimer=null;}
+  clearTimeout(testDebounce);
+  if($("testBtn")){$("testBtn").textContent="🔬 Test Modunu Baslat";$("testBadge").classList.add("hidden");}
+  try{ await api(`/api/cabins/${cabin.id}/test`,{method:"POST",body:JSON.stringify({enabled:false})}); }catch(e){}
+  if(notify){
+    toast("✅ <b>Normal moda donuldu.</b> Gercek sensor verisi akmaya devam ediyor.","ok");
+    logEv("TEST MODU kapatildi → normal mod","green");
+  }
+}
+
 /* ---- Config formu ---- */
 function fillConfigForm(t,d){
   $("cf-tmin").value=t.sicaklikMin; $("cf-tmax").value=t.sicaklikMax;
@@ -552,35 +661,47 @@ function handleEvent(ev){
   const d=ev.data||{};
   if(ev.type==="reading"){
     updateMetric("m-t",d.t);updateMetric("m-h",d.h);updateMetric("m-ph",d.ph);updateMetric("m-tds",d.tds);
+    lastReading=d;                  // test modu tds/ph dolgusu icin sakla
     setOnline(true); pushReading(d);
-    glowUp();                       // ESP→Broker→Backend yesil
-    setTimeout(glowDB,500);         // Backend→Postgres mavi
+    checkThresholds(d);             // esik asimi -> toast bildirimi
+    glowUp();                       // ① ESP → ② Broker → ③ Backend (asamali yesil)
+    setTimeout(glowDB,1150);        // ④ Backend → Postgres mavi
     logEv(`Telemetri: ${fmt(d.t)}°C / ${fmt(d.h)}% / pH ${fmt(d.ph)} / ${fmt(d.tds)}ppm`,"green");
   }else if(ev.type==="state"){
     renderActuators(d); setOnline(true);
-    glowUp(); logEv("Aktuator durumu guncellendi (up/state)","green");
+    if(d.source==="decision" && cooled("otonom")){
+      toast("🤖 <b>Otonom mod devrede:</b> cihaz karar motoru aktuatorleri kendi kararıyla guncelledi (up/state, source=decision).","info");
+    }
+    glowUp(); logEv(`Aktuator durumu guncellendi (up/state${d.source?", kaynak: "+d.source:""})`,"green");
   }else if(ev.type==="status"){
     setOnline(!!d.online);
+    if(!d.online) toast("🔌 <b>Cihaz cevrimdisi!</b> Kabin icerideki otonom modda calismaya devam ediyor.","err",8000);
     logEv("Durum: "+(d.online?"cevrimici":"CEVRIMDISI (LWT)"), d.online?"green":"orange");
   }else if(ev.type==="alert"){
+    toast(`🚨 <b>Cihaz uyarisi — ${d.type}:</b> ${d.msg}`,"err",8000);
     logEv(`⚠️ ${d.type}: ${d.msg}`,"orange");
   }
 }
 
 /* ---- Mimari diyagram + animasyon ---- */
+// Numarali adimlar: ①②③④ = veri YUKARI yonu (yesil/mavi), ❶❷❸ = komut ASAGI yonu (turuncu).
 const MERMAID_DEF=`flowchart LR
-  ESP["🌱 ESP32 Kabin<br/>Firmware · Otonom Karar"]
-  BROKER["📡 Mosquitto<br/>MQTT Broker"]
-  BACKEND["⚙️ Go Backend<br/>Hexagonal · DDD"]
-  DB[("🗄️ PostgreSQL<br/>Time-series + Aggregate")]
-  UI["🖥️ Web UI<br/>bu ekran"]
-  ESP -->|"up/sensors · up/state"| BROKER
-  BROKER -->|"subscribe"| BACKEND
-  BACKEND -->|"INSERT readings"| DB
-  BACKEND -->|"WebSocket broadcast"| UI
-  UI -->|"REST komut/config"| BACKEND
-  BACKEND -->|"down/command · down/config"| BROKER
-  BROKER -->|"down/*"| ESP`;
+  subgraph KABIN["🏠 KABIN (cihaz tarafi)"]
+    ESP["🌱 ESP32<br/>sensorler + otonom karar"]
+  end
+  subgraph BULUT["☁️ BULUT (sunucu tarafi)"]
+    BROKER["📡 MQTT Broker<br/>HiveMQ Cloud"]
+    BACKEND["⚙️ Go Backend<br/>Hexagonal · DDD"]
+    DB[("🗄️ PostgreSQL<br/>olcum gecmisi")]
+  end
+  UI["🖥️ Web Paneli<br/>(bu ekran)"]
+  ESP -->|"① sensor olcumu<br/>up/sensors (5 sn'de bir)"| BROKER
+  BROKER -->|"② backend dinler<br/>cabin/+/up/#"| BACKEND
+  BACKEND -->|"③ kaydet<br/>INSERT readings"| DB
+  BACKEND -->|"④ canli ilet<br/>WebSocket"| UI
+  UI -->|"❶ kullanici istegi<br/>REST: komut · ayar · test"| BACKEND
+  BACKEND -->|"❷ cihaza yayinla<br/>down/command · config · test"| BROKER
+  BROKER -->|"❸ cihaz uygular"| ESP`;
 async function initArchitecture(){
   mermaid.initialize({startOnLoad:false,theme:"dark",securityLevel:"loose",
     themeVariables:{primaryColor:"#16233c",lineColor:"#5d7290",primaryTextColor:"#e6edf6",
@@ -600,9 +721,14 @@ function glowNodes(names,color){
     }
   });
 }
-function glowUp(){ glowNodes(["ESP32","Mosquitto","Go Backend"],"green"); }
-function glowDB(){ glowNodes(["PostgreSQL"],"blue"); }
-function glowDown(){ glowNodes(["Web UI","Go Backend","Mosquitto","ESP32"],"orange"); }
+// glowSeq: dugumleri SIRAYLA parlatir; verinin hangi asamadan gectigi adim adim izlenir.
+function glowSeq(steps,color,stepMs=380){
+  steps.forEach((name,i)=>setTimeout(()=>glowNodes([name],color),i*stepMs));
+}
+function glowUp(){ glowSeq(["ESP32","MQTT Broker","Go Backend"],"green"); }            // ①→②→③
+function glowDB(){ glowNodes(["PostgreSQL"],"blue"); }                                  // ④ (gecikmeli cagrilir)
+function glowDown(){ glowSeq(["Web Paneli","Go Backend","MQTT Broker","ESP32"],"orange"); } // ❶→❷→❸
+function glowTest(){ glowSeq(["Web Paneli","Go Backend","MQTT Broker","Go Backend","PostgreSQL"],"orange",300); }
 
 /* ============== Baslangic ============== */
 (function init(){

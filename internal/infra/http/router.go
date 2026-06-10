@@ -70,6 +70,7 @@ func NewRouter(d Deps) *gin.Engine {
 	if d.Control != nil {
 		api.POST("/cabins/:id/command", d.Control.SendCommand)
 		api.PUT("/cabins/:id/config", d.Control.UpdateConfig)
+		api.POST("/cabins/:id/test", d.Control.SendTest)
 	}
 	if d.History != nil {
 		api.GET("/cabins/:id/readings", d.History.GetReadings)

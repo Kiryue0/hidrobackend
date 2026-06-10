@@ -101,7 +101,7 @@ func main() {
 		logger.Warn("mqtt publisher baslatilamadi, arka planda yeniden deneniyor", "err", err)
 	}
 	defer publisher.Stop()
-	controlService := usecases.NewControlService(cabinRepo, publisher, publisher.ConfigPort())
+	controlService := usecases.NewControlService(cabinRepo, publisher, publisher.ConfigPort(), publisher.TestPort())
 	controlHandler := apphttp.NewControlHandler(controlService)
 
 	gin.SetMode(gin.ReleaseMode)

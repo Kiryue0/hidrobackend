@@ -111,6 +111,23 @@ type CabinConfigPort interface {
 	Send(ctx context.Context, cabinID cabin.CabinId, t cabin.Thresholds, d cabin.DecisionConfig) error
 }
 
+// TestReading UI test modunda girilen sahte sensör değerleri.
+type TestReading struct {
+	T   float64
+	H   float64
+	Tds float64
+	Ph  float64
+}
+
+// TestTelemetryPort sahte ölçümü normal telemetri hattına (cabin/{id}/up/sensors;
+// backend'in kendi aboneliği işler: DB + WS) ve cihaz ekranında gösterilebilmesi
+// için cabin/{id}/down/test'e yayar. SetTestMode(false) cihaza normal moda
+// dönmesini bildirir.
+type TestTelemetryPort interface {
+	SendTestReading(ctx context.Context, cabinID cabin.CabinId, r TestReading) error
+	SetTestMode(ctx context.Context, cabinID cabin.CabinId, enabled bool) error
+}
+
 // --- Outbound: güvenlik servisleri ---
 
 // PasswordHasher parola hash'leme/doğrulama (bcrypt).

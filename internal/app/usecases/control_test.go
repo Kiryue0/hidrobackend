@@ -27,6 +27,21 @@ func (f *fakeConfigPort) Send(_ context.Context, _ cabin.CabinId, t cabin.Thresh
 	return nil
 }
 
+type fakeTestPort struct {
+	last    *ports.TestReading
+	enabled *bool
+}
+
+func (f *fakeTestPort) SendTestReading(_ context.Context, _ cabin.CabinId, r ports.TestReading) error {
+	f.last = &r
+	return nil
+}
+
+func (f *fakeTestPort) SetTestMode(_ context.Context, _ cabin.CabinId, enabled bool) error {
+	f.enabled = &enabled
+	return nil
+}
+
 func boolPtr(b bool) *bool { return &b }
 func intPtr(i int) *int    { return &i }
 
@@ -38,7 +53,41 @@ func setupControl(t *testing.T) (*ControlService, *fakeCommandPort, *fakeConfigP
 	repo.store["CAB-3778C4"] = c
 	cmd := &fakeCommandPort{}
 	cfg := &fakeConfigPort{}
-	return NewControlService(repo, cmd, cfg), cmd, cfg, repo
+	return NewControlService(repo, cmd, cfg, &fakeTestPort{}), cmd, cfg, repo
+}
+
+func TestSendTestReading(t *testing.T) {
+	repo := newFakeCabinRepo()
+	c, _ := cabin.NewCabin(mustCID(t, "CAB-3778C4"), "Salon")
+	_ = c.AssignOwner(1)
+	repo.store["CAB-3778C4"] = c
+	tp := &fakeTestPort{}
+	s := NewControlService(repo, &fakeCommandPort{}, &fakeConfigPort{}, tp)
+
+	in := TestInput{T: 31.5, H: 88, Tds: 1100, Ph: 6.1}
+	if err := s.SendTestReading(context.Background(), 1, "CAB-3778C4", in); err != nil {
+		t.Fatalf("test reading: %v", err)
+	}
+	if tp.last == nil || tp.last.T != 31.5 || tp.last.H != 88 {
+		t.Fatalf("yayınlanan ölçüm yanlış: %+v", tp.last)
+	}
+
+	// geçersiz aralık reddedilir
+	if err := s.SendTestReading(context.Background(), 1, "CAB-3778C4", TestInput{T: 99, H: 50, Ph: 6, Tds: 100}); !errors.Is(err, apperr.ErrValidation) {
+		t.Fatalf("aralık dışı sıcaklık ErrValidation dönmeli, geldi: %v", err)
+	}
+	// sahip olmayan kullanıcı reddedilir
+	if err := s.SendTestReading(context.Background(), 2, "CAB-3778C4", in); !errors.Is(err, apperr.ErrForbidden) {
+		t.Fatalf("yabancı kullanıcı ErrForbidden dönmeli, geldi: %v", err)
+	}
+
+	// test modu kapatma cihaza iletilir
+	if err := s.SetTestMode(context.Background(), 1, "CAB-3778C4", false); err != nil {
+		t.Fatalf("test modu: %v", err)
+	}
+	if tp.enabled == nil || *tp.enabled {
+		t.Fatalf("enabled=false iletilmeli, geldi: %v", tp.enabled)
+	}
 }
 
 func mustCID(t *testing.T, s string) cabin.CabinId {

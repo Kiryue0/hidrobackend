@@ -1,0 +1,7 @@
+# Build bağlamına girmesi gerekmeyenler (passwd root-owned olduğundan
+# yerel docker build'i kırıyor; Railway'de zaten gitignore'lu).
+.git
+.env
+deploy/
+web/node_modules/
+*.md

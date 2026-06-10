@@ -14,11 +14,12 @@ type ControlService struct {
 	cabins   ports.CabinRepository
 	commands ports.ActuatorCommandPort
 	config   ports.CabinConfigPort
+	test     ports.TestTelemetryPort
 }
 
 // NewControlService bağımlılıkları enjekte eder.
-func NewControlService(cabins ports.CabinRepository, commands ports.ActuatorCommandPort, config ports.CabinConfigPort) *ControlService {
-	return &ControlService{cabins: cabins, commands: commands, config: config}
+func NewControlService(cabins ports.CabinRepository, commands ports.ActuatorCommandPort, config ports.CabinConfigPort, test ports.TestTelemetryPort) *ControlService {
+	return &ControlService{cabins: cabins, commands: commands, config: config, test: test}
 }
 
 // ownedCabin sahiplik kontrolüyle kabini yükler.
@@ -110,4 +111,40 @@ func (s *ControlService) UpdateCabinConfig(ctx context.Context, ownerID int64, c
 		return nil, err
 	}
 	return c, nil
+}
+
+// TestInput UI test modunda girilen sahte ölçüm.
+type TestInput struct {
+	T, H, Tds, Ph float64
+}
+
+// SendTestReading sahte ölçümü doğrular ve normal telemetri hattına enjekte eder.
+// Veri DB'ye yazılır ve WS ile yayılır; cihaz down/test'ten görebilir.
+func (s *ControlService) SendTestReading(ctx context.Context, ownerID int64, cabinID string, in TestInput) error {
+	c, err := s.ownedCabin(ctx, ownerID, cabinID)
+	if err != nil {
+		return err
+	}
+	if in.T < -20 || in.T > 60 {
+		return fmt.Errorf("%w: sıcaklık -20..60 °C aralığında olmalı", apperr.ErrValidation)
+	}
+	if in.H < 0 || in.H > 100 {
+		return fmt.Errorf("%w: nem 0..100 aralığında olmalı", apperr.ErrValidation)
+	}
+	if in.Ph < 0 || in.Ph > 14 {
+		return fmt.Errorf("%w: pH 0..14 aralığında olmalı", apperr.ErrValidation)
+	}
+	if in.Tds < 0 || in.Tds > 5000 {
+		return fmt.Errorf("%w: TDS 0..5000 aralığında olmalı", apperr.ErrValidation)
+	}
+	return s.test.SendTestReading(ctx, c.ID(), ports.TestReading{T: in.T, H: in.H, Tds: in.Tds, Ph: in.Ph})
+}
+
+// SetTestMode test modunu açıp kapatır; kapanışta cihaza normal moda dön bildirimi gider.
+func (s *ControlService) SetTestMode(ctx context.Context, ownerID int64, cabinID string, enabled bool) error {
+	c, err := s.ownedCabin(ctx, ownerID, cabinID)
+	if err != nil {
+		return err
+	}
+	return s.test.SetTestMode(ctx, c.ID(), enabled)
 }

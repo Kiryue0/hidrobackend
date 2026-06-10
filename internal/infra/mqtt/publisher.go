@@ -90,6 +90,48 @@ func (p *Publisher) Send(ctx context.Context, cabinID cabin.CabinId, cmd ports.A
 	return p.publish(ctx, topic, payload)
 }
 
+// testPort TestTelemetryPort implementasyonu (aynı client).
+type testPort struct{ p *Publisher }
+
+// TestPort aynı yayıncıyı TestTelemetryPort olarak döner.
+func (p *Publisher) TestPort() ports.TestTelemetryPort { return testPort{p: p} }
+
+// SendTestReading sahte ölçümü up/sensors kontratıyla yayınlar (backend'in
+// kendi aboneliği normal hattan işler: DB + WS + grafik) ve cihazın
+// gösterebilmesi için down/test'e iletir.
+func (t testPort) SendTestReading(ctx context.Context, cabinID cabin.CabinId, r ports.TestReading) error {
+	// ts=0: alış zamanı kullanılır (tsOrNow). Kontrat: Bölüm 2.3 up/sensors.
+	sp := sensorsPayload{T: r.T, H: r.H, Td: r.Tds, Ph: r.Ph}
+	sp.Ok.Sht, sp.Ok.Tds, sp.Ok.Ph = true, true, true
+	sensors, err := json.Marshal(sp)
+	if err != nil {
+		return err
+	}
+	if err := t.p.publish(ctx, fmt.Sprintf("cabin/%s/up/sensors", cabinID.String()), sensors); err != nil {
+		return err
+	}
+	down, err := json.Marshal(struct {
+		Enabled bool    `json:"enabled"`
+		T       float64 `json:"t"`
+		H       float64 `json:"h"`
+	}{true, r.T, r.H})
+	if err != nil {
+		return err
+	}
+	return t.p.publish(ctx, fmt.Sprintf("cabin/%s/down/test", cabinID.String()), down)
+}
+
+// SetTestMode cihaza test modunun açılıp kapandığını bildirir (down/test).
+func (t testPort) SetTestMode(ctx context.Context, cabinID cabin.CabinId, enabled bool) error {
+	payload, err := json.Marshal(struct {
+		Enabled bool `json:"enabled"`
+	}{enabled})
+	if err != nil {
+		return err
+	}
+	return t.p.publish(ctx, fmt.Sprintf("cabin/%s/down/test", cabinID.String()), payload)
+}
+
 // configPublisher CabinConfigPort'u ayrı bir tip üzerinden sunar (aynı client).
 // Not: down/config payload'u {"thresholds":...,"decision":...} (Bölüm 2.3).
 type configPort struct{ p *Publisher }
