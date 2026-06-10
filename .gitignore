@@ -2,7 +2,7 @@
 /bin/
 /tmp/
 *.out
-server
+/server
 
 # Mosquitto kullanıcı/parola dosyası (setup-auth.sh ile üretilir)
 deploy/mosquitto/config/passwd
