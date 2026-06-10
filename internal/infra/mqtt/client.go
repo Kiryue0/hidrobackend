@@ -1,7 +1,9 @@
 package mqtt
 
 import (
+	"context"
 	"crypto/tls"
+	"log/slog"
 	"net/url"
 	"time"
 
@@ -22,10 +24,33 @@ func needsTLS(brokerURL string) bool {
 	}
 }
 
-// connectTimeout ilk bağlantı denemesi için maksimum bekleme süresi.
-// Bu süre içinde broker'a ulaşılamazsa uygulama yine de başlar;
-// AutoReconnect + ConnectRetry arka planda yeniden dener.
-const connectTimeout = 30 * time.Second
+// connectTimeout tek bir bağlantı denemesi için maksimum bekleme süresi.
+const connectTimeout = 15 * time.Second
+
+// connectRetryInterval başarısız bağlantı denemeleri arası bekleme.
+const connectRetryInterval = 5 * time.Second
+
+// connectWithRetry bağlantı kurulana dek dener ve HER denemenin gerçek
+// hatasını loglar. Paho'nun ConnectRetry'ı CONNACK reddini (örn. "not
+// Authorized") token'a yansıtmadan sessizce yeniden dediği için
+// kullanılmıyor; teşhis edilebilirlik bu döngüyle sağlanıyor.
+func connectWithRetry(ctx context.Context, c paho.Client, log *slog.Logger, name string) {
+	for attempt := 1; ; attempt++ {
+		token := c.Connect()
+		token.Wait()
+		if err := token.Error(); err != nil {
+			log.Error("mqtt baglanti hatasi", "client", name, "deneme", attempt, "err", err)
+		} else {
+			log.Info("mqtt baglandi", "client", name)
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(connectRetryInterval):
+		}
+	}
+}
 
 // baseClientOptions ortak paho yapılandırmasını üretir.
 // tls:// şeması algılanırsa sistem kök sertifikalarıyla TLS aktifleştirir.
@@ -34,8 +59,7 @@ func baseClientOptions(cfg Config) *paho.ClientOptions {
 		AddBroker(cfg.Broker).
 		SetCleanSession(true).
 		SetAutoReconnect(true).
-		SetConnectRetry(true).
-		SetConnectRetryInterval(5 * time.Second)
+		SetConnectTimeout(connectTimeout)
 
 	if cfg.Username != "" {
 		opts.SetUsername(cfg.Username).SetPassword(cfg.Password)

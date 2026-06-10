@@ -108,6 +108,9 @@ func Load() (*Config, error) {
 	if v := os.Getenv("MQTT_PASSWORD"); v != "" {
 		cfg.MQTTPassword = v
 	}
+	if v := os.Getenv("MQTT_CLIENT_ID"); v != "" {
+		cfg.MQTTClientID = v
+	}
 	if v := os.Getenv("JWT_SECRET"); v != "" {
 		cfg.JWTSecret = v
 	}

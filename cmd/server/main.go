@@ -96,8 +96,8 @@ func main() {
 	defer subscriber.Stop()
 
 	// MQTT publisher (backend -> cihaz): down/command + down/config
-	publisher := mqtt.NewPublisher(mqttCfg)
-	if err := publisher.Start(); err != nil {
+	publisher := mqtt.NewPublisher(mqttCfg, logger)
+	if err := publisher.Start(ctx); err != nil {
 		logger.Warn("mqtt publisher baslatilamadi, arka planda yeniden deneniyor", "err", err)
 	}
 	defer publisher.Stop()

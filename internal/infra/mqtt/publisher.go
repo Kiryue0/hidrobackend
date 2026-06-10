@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 
 	paho "github.com/eclipse/paho.mqtt.golang"
 
@@ -17,27 +18,31 @@ const publishQoS = 1
 // ports.ActuatorCommandPort ve ports.CabinConfigPort implementasyonu.
 type Publisher struct {
 	client paho.Client
+	broker string
+	log    *slog.Logger
+	cancel context.CancelFunc
 }
 
 // NewPublisher kendi paho client'ını yapılandırır (ClientID'ye "-pub" eklenir).
-func NewPublisher(cfg Config) *Publisher {
+func NewPublisher(cfg Config, log *slog.Logger) *Publisher {
 	opts := baseClientOptions(cfg).
 		SetClientID(cfg.ClientID + "-pub")
-	return &Publisher{client: paho.NewClient(opts)}
+	return &Publisher{client: paho.NewClient(opts), broker: cfg.Broker, log: log}
 }
 
-// Start broker'a bağlanır. connectTimeout içinde bağlanamazsa arka plana bırakır.
-func (p *Publisher) Start() error {
-	token := p.client.Connect()
-	if token.WaitTimeout(connectTimeout) {
-		return token.Error()
-	}
-	// Timeout: broker şu an erişilemez. AutoReconnect arka planda yeniden dener.
+// Start broker'a arka planda bağlanır; başarısız denemelerin gerçek hatasını loglar.
+func (p *Publisher) Start(ctx context.Context) error {
+	ctx, p.cancel = context.WithCancel(ctx)
+	p.log.Info("mqtt baglaniliyor", "client", "publisher", "broker", p.broker)
+	go connectWithRetry(ctx, p.client, p.log, "publisher")
 	return nil
 }
 
-// Stop bağlantıyı kapatır.
+// Stop bağlantıyı (ve süren bağlanma denemelerini) durdurur.
 func (p *Publisher) Stop() {
+	if p.cancel != nil {
+		p.cancel()
+	}
 	if p.client.IsConnected() {
 		p.client.Disconnect(250)
 	}

@@ -8,7 +8,7 @@
 | `DATABASE_URL` | `postgres://user:pass@host:5432/hidro` | PostgreSQL bağlantı adresi (Railway'de otomatik, **aşağıya bak**) |
 | `JWT_SECRET` | `9903bdc90415d4981f...` | JWT imzalama anahtarı (rastgele 32+ byte hex) |
 | `JWT_TTL` | `24h` | Token geçerlilik süresi |
-| `MQTT_BROKER` | `tls://b536fa6dcc8d4e8da0e0d0c297cf8b5c.s1.eu.hivemq.cloud:8883` | MQTT broker (dev: `tcp://localhost:1883`, prod: `tls://host:8883`) |
+| `MQTT_BROKER` | `tls://66a0bc1ce4434ff4a592d0a51e6f7db5.s1.eu.hivemq.cloud:8883` | MQTT broker (dev: `tcp://localhost:1883`, prod: `tls://host:8883`) — **host, HiveMQ Cloud konsolundaki aktif cluster ile birebir aynı olmalı; ESP32 ile aynı cluster!** |
 | `MQTT_CLIENT_ID` | `hidro-backend` | MQTT istemci ID'si |
 | `MQTT_USERNAME` | `backend` | MQTT kullanıcı adı (HiveMQ Cloud -> Access Management) |
 | `MQTT_PASSWORD` | `sifre-buraya` | MQTT şifresi |
@@ -50,7 +50,7 @@ git push -u origin main
 Proje dashboard'unda **Variables** sekmesine tıkla ve yukarıdaki tablodaki değişkenleri ekle:
 
 - `JWT_SECRET` — yeni rastgele değer üret: `openssl rand -hex 32`
-- `MQTT_BROKER` — `tls://b536fa6dcc8d4e8da0e0d0c297cf8b5c.s1.eu.hivemq.cloud:8883`
+- `MQTT_BROKER` — `tls://66a0bc1ce4434ff4a592d0a51e6f7db5.s1.eu.hivemq.cloud:8883` (HiveMQ konsolundaki aktif cluster URL'si)
 - `MQTT_USERNAME` — HiveMQ Cloud'dan aldığın kullanıcı adı
 - `MQTT_PASSWORD` — HiveMQ Cloud'dan aldığın şifre
 - `MQTT_CLIENT_ID` — `hidro-backend` (ya da benzersiz bir isim)

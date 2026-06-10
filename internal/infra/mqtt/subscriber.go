@@ -39,6 +39,8 @@ type job struct {
 // Subscriber up/* mesajlarını dinler ve TelemetryService'e yönlendirir.
 type Subscriber struct {
 	client    paho.Client
+	broker    string
+	username  string
 	telemetry *usecases.TelemetryService
 	log       *slog.Logger
 
@@ -52,6 +54,8 @@ type Subscriber struct {
 // NewSubscriber paho client'ı yapılandırır (henüz bağlanmaz).
 func NewSubscriber(cfg Config, ts *usecases.TelemetryService, log *slog.Logger) *Subscriber {
 	s := &Subscriber{
+		broker:    cfg.Broker,
+		username:  cfg.Username,
 		telemetry: ts,
 		log:       log,
 		jobs:      make(chan job, queueSize),
@@ -80,18 +84,10 @@ func (s *Subscriber) Start(ctx context.Context) error {
 		go s.worker()
 	}
 
-	s.log.Info("mqtt baglaniliyor", "broker", s.client)
-	token := s.client.Connect()
-	if token.WaitTimeout(connectTimeout) {
-		if err := token.Error(); err != nil {
-			s.log.Error("mqtt baglanti hatasi", "err", err)
-			return err
-		}
-		s.log.Info("mqtt baglandi")
-		return nil
-	}
-	// Timeout: broker şu an erişilemez. ConnectRetry+AutoReconnect arka planda yeniden dener.
-	s.log.Warn("mqtt ilk baglanti zaman asimi, arka planda yeniden deneniyor")
+	// Etkin yapılandırmayı logla: Railway'de env değişkeninin gerçekten
+	// uygulanıp uygulanmadığı buradan doğrulanır (parola asla loglanmaz).
+	s.log.Info("mqtt baglaniliyor", "client", "subscriber", "broker", s.broker, "username", s.username)
+	go connectWithRetry(s.ctx, s.client, s.log, "subscriber")
 	return nil
 }
 
