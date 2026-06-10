@@ -88,18 +88,17 @@ func main() {
 	}
 
 	// MQTT subscriber (cihaz -> backend)
+	// Hata fatal degil: AutoReconnect+ConnectRetry arka planda yeniden dener.
 	subscriber := mqtt.NewSubscriber(mqttCfg, telemetryService, logger)
 	if err := subscriber.Start(ctx); err != nil {
-		logger.Error("mqtt subscriber baslatilamadi", "err", err)
-		os.Exit(1)
+		logger.Warn("mqtt subscriber baslatilamadi, arka planda yeniden deneniyor", "err", err)
 	}
 	defer subscriber.Stop()
 
 	// MQTT publisher (backend -> cihaz): down/command + down/config
 	publisher := mqtt.NewPublisher(mqttCfg)
 	if err := publisher.Start(); err != nil {
-		logger.Error("mqtt publisher baslatilamadi", "err", err)
-		os.Exit(1)
+		logger.Warn("mqtt publisher baslatilamadi, arka planda yeniden deneniyor", "err", err)
 	}
 	defer publisher.Stop()
 	controlService := usecases.NewControlService(cabinRepo, publisher, publisher.ConfigPort())
