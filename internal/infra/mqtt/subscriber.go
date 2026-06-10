@@ -61,7 +61,10 @@ func NewSubscriber(cfg Config, ts *usecases.TelemetryService, log *slog.Logger) 
 		SetClientID(cfg.ClientID).
 		SetOnConnectHandler(s.onConnect).
 		SetConnectionLostHandler(func(_ paho.Client, err error) {
-			log.Warn("mqtt bağlantı koptu", "err", err)
+			log.Warn("mqtt baglanti koptu", "err", err)
+		}).
+		SetReconnectingHandler(func(_ paho.Client, _ *paho.ClientOptions) {
+			log.Info("mqtt yeniden baglaniliyor...")
 		})
 
 	s.client = paho.NewClient(opts)
@@ -77,21 +80,30 @@ func (s *Subscriber) Start(ctx context.Context) error {
 		go s.worker()
 	}
 
+	s.log.Info("mqtt baglaniliyor", "broker", s.client)
 	token := s.client.Connect()
 	if token.WaitTimeout(connectTimeout) {
-		return token.Error()
+		if err := token.Error(); err != nil {
+			s.log.Error("mqtt baglanti hatasi", "err", err)
+			return err
+		}
+		s.log.Info("mqtt baglandi")
+		return nil
 	}
 	// Timeout: broker şu an erişilemez. ConnectRetry+AutoReconnect arka planda yeniden dener.
-	s.log.Warn("mqtt ilk bağlantı zaman aşımı, arka planda yeniden deneniyor")
+	s.log.Warn("mqtt ilk baglanti zaman asimi, arka planda yeniden deneniyor")
 	return nil
 }
 
 // onConnect (ilk bağlanma + her reconnect) up/* filtresine abone olur.
 func (s *Subscriber) onConnect(c paho.Client) {
 	token := c.Subscribe(upTopicFilter, subQoS, s.onMessage)
-	token.Wait()
+	if !token.WaitTimeout(10 * time.Second) {
+		s.log.Error("mqtt abonelik zaman asimi", "filter", upTopicFilter)
+		return
+	}
 	if err := token.Error(); err != nil {
-		s.log.Error("mqtt abonelik hatası", "filter", upTopicFilter, "err", err)
+		s.log.Error("mqtt abonelik hatasi", "filter", upTopicFilter, "err", err)
 		return
 	}
 	s.log.Info("mqtt abone olundu", "filter", upTopicFilter)
