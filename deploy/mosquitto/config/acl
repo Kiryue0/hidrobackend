@@ -1,0 +1,9 @@
+# Mosquitto topic ACL (ADIM 9 / Bölüm 8).
+# Backend tüm cabin topic'lerine yetkili tek servistir.
+user backend
+topic readwrite cabin/#
+
+# Her cihaz YALNIZCA kendi cabin/{kabin_id}/* alanına erişebilir.
+# Kural: cihazın MQTT kullanıcı adı == kabin_id (%u). Böylece kabin başına
+# ayrı ACL satırı gerekmeden topic izolasyonu sağlanır.
+pattern readwrite cabin/%u/#

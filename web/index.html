@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Hidroponik Akilli Kabin — Kontrol & Mimari Paneli</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.min.js"></script>
+<style>
+  :root{
+    --bg:#0b1220; --panel:#121b2e; --panel2:#0f1726; --line:#22304a;
+    --txt:#e6edf6; --muted:#8aa0bd; --accent:#38bdf8; --green:#22c55e;
+    --blue:#3b82f6; --orange:#f59e0b; --red:#ef4444; --radius:14px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Segoe UI',system-ui,Arial,sans-serif;background:
+       radial-gradient(1200px 600px at 80% -10%,#16233c 0,transparent 60%),var(--bg);
+       color:var(--txt);min-height:100vh}
+  h1,h2,h3{margin:0 0 .4em}
+  button{cursor:pointer;font-family:inherit}
+  input,select{font-family:inherit}
+  .hidden{display:none !important}
+
+  /* ---- Auth / waiting ---- */
+  .center-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+        box-shadow:0 20px 50px rgba(0,0,0,.45)}
+  .auth-card{width:380px;max-width:100%;padding:30px}
+  .auth-card h1{font-size:22px;text-align:center}
+  .sub{color:var(--muted);font-size:13px;text-align:center;margin-bottom:18px}
+  .tabs{display:flex;gap:8px;margin-bottom:18px}
+  .tabs button{flex:1;padding:10px;border:1px solid var(--line);background:var(--panel2);
+        color:var(--muted);border-radius:10px;font-weight:600}
+  .tabs button.active{background:var(--accent);color:#04121f;border-color:var(--accent)}
+  label{display:block;font-size:12px;color:var(--muted);margin:12px 0 6px}
+  .inp{width:100%;padding:11px 12px;background:var(--panel2);border:1px solid var(--line);
+        border-radius:10px;color:var(--txt);font-size:14px}
+  .btn-primary{width:100%;margin-top:18px;padding:12px;border:0;border-radius:10px;
+        background:linear-gradient(90deg,#38bdf8,#3b82f6);color:#04121f;font-weight:700;font-size:15px}
+  .msg{margin-top:12px;font-size:13px;min-height:18px;text-align:center}
+  .msg.err{color:var(--red)} .msg.ok{color:var(--green)}
+
+  .waiting{width:560px;max-width:100%;padding:40px;text-align:center}
+  .waiting .pulse{width:64px;height:64px;border-radius:50%;margin:0 auto 20px;
+        background:var(--accent);opacity:.85;animation:pulse 1.6s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(56,189,248,.6)}70%{box-shadow:0 0 0 22px rgba(56,189,248,0)}100%{box-shadow:0 0 0 0 rgba(56,189,248,0)}}
+  .waiting h2{font-size:20px}
+  .waiting p{color:var(--muted);line-height:1.6}
+  .topbar{position:fixed;top:0;right:0;padding:12px 16px;font-size:12px;color:var(--muted);z-index:30}
+  .topbar button{background:transparent;border:1px solid var(--line);color:var(--muted);
+        padding:6px 10px;border-radius:8px;margin-left:8px}
+  .topbar .del{color:var(--red);border-color:var(--red)}
+
+  /* ---- Offline banner ---- */
+  #offlineBanner{position:sticky;top:0;z-index:40;background:var(--red);color:#fff;
+        padding:16px;text-align:center;font-size:18px;font-weight:800;letter-spacing:.3px;
+        box-shadow:0 6px 20px rgba(239,68,68,.5)}
+
+  /* ---- Dashboard split ---- */
+  .dash{display:grid;grid-template-columns:1fr 1fr;gap:18px;padding:18px;max-width:1500px;margin:0 auto}
+  @media(max-width:1050px){.dash{grid-template-columns:1fr}}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px}
+  .panel-title{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:700;
+        color:var(--accent);margin-bottom:14px;text-transform:uppercase;letter-spacing:.5px}
+  .panel-title .tag{margin-left:auto;font-size:11px;color:var(--muted);font-weight:500;
+        text-transform:none;letter-spacing:0}
+  .head{display:flex;align-items:center;gap:12px;padding:14px 18px}
+  .head h1{font-size:18px} .head .cabin{color:var(--muted);font-size:13px}
+  .dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px}
+  .dot.on{background:var(--green);box-shadow:0 0 8px var(--green)} .dot.off{background:var(--red)}
+
+  .telemetry{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px}
+  .metric{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center}
+  .metric .v{font-size:26px;font-weight:800} .metric .l{font-size:11px;color:var(--muted);margin-top:4px}
+  .metric .u{font-size:13px;color:var(--muted)}
+  .metric.flash{animation:flash .8s}
+  @keyframes flash{0%{background:#1c2c47}100%{background:var(--panel2)}}
+
+  .section{margin-top:18px;border-top:1px solid var(--line);padding-top:16px}
+  .section h3{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  .acts{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .act{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;text-align:center}
+  .act .name{font-size:12px;color:var(--muted)}
+  .act .state{font-size:13px;font-weight:700;margin:6px 0}
+  .act button{width:100%;padding:8px;border:0;border-radius:8px;background:#1f3a5f;color:#cfe6ff;font-weight:600;font-size:12px}
+  .act button.on{background:var(--green);color:#04121f}
+  .fan input[type=range]{width:100%}
+  .fan .row{display:flex;gap:6px;align-items:center;margin-top:6px}
+  .fan .row button{flex:0 0 auto;padding:8px 10px}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .grid2 .f label{margin-top:8px}
+  .switch{display:flex;align-items:center;gap:10px;margin:12px 0}
+  .switch input{transform:scale(1.3)}
+  .save-btn{margin-top:12px;padding:11px 16px;border:0;border-radius:10px;
+        background:linear-gradient(90deg,#34d399,#22c55e);color:#04121f;font-weight:700}
+  .chart-wrap{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:12px;height:220px}
+
+  /* ---- Architecture panel ---- */
+  #mermaid{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:14px;overflow:auto}
+  #mermaid svg{max-width:100%;height:auto}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;margin:12px 0;font-size:12px;color:var(--muted)}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .lg{width:14px;height:14px;border-radius:3px;display:inline-block}
+  .arch-notes{margin-top:14px}
+  .arch-notes li{color:var(--muted);line-height:1.7;font-size:13px;margin-bottom:6px}
+  .arch-notes b{color:var(--txt)}
+  .ev-log{margin-top:14px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;
+        padding:10px;height:120px;overflow:auto;font-family:ui-monospace,monospace;font-size:11px;color:var(--muted)}
+
+  /* node glow (mermaid) */
+  .node.glow-green > * , .node.glow-green rect,.node.glow-green polygon,.node.glow-green path,.node.glow-green circle{
+        stroke:var(--green)!important;stroke-width:3px!important;filter:drop-shadow(0 0 7px var(--green))}
+  .node.glow-blue rect,.node.glow-blue polygon,.node.glow-blue path,.node.glow-blue circle{
+        stroke:var(--blue)!important;stroke-width:3px!important;filter:drop-shadow(0 0 7px var(--blue))}
+  .node.glow-orange rect,.node.glow-orange polygon,.node.glow-orange path,.node.glow-orange circle{
+        stroke:var(--orange)!important;stroke-width:3px!important;filter:drop-shadow(0 0 7px var(--orange))}
+  .node{transition:filter .2s}
+
+  /* ---- Confirm dialog ---- */
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100;
+        display:flex;align-items:center;justify-content:center}
+  .confirm-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+        padding:30px;max-width:380px;text-align:center}
+  .confirm-card h3{margin-bottom:16px}
+  .confirm-card p{color:var(--muted);margin-bottom:20px;line-height:1.5}
+  .confirm-card .btns{display:flex;gap:10px;justify-content:center}
+  .confirm-card .btns button{padding:10px 20px;border-radius:10px;font-weight:700}
+  .confirm-card .cancel{background:var(--panel2);border:1px solid var(--line);color:var(--muted)}
+  .confirm-card .confirm{background:var(--red);border:0;color:#fff}
+</style>
+</head>
+<body>
+
+<!-- =================== ASAMA 1: AUTH =================== -->
+<div id="authView" class="center-screen">
+  <div class="card auth-card">
+    <h1>🌱 Hidroponik Akilli Kabin</h1>
+    <div class="sub">Kontrol & Mimari Test Paneli</div>
+    <div class="tabs">
+      <button id="tabLogin" class="active" onclick="setMode('login')">Giris Yap</button>
+      <button id="tabRegister" onclick="setMode('register')">Kayit Ol</button>
+    </div>
+    <label>Kullanici Adi</label>
+    <input id="username" class="inp" autocomplete="username" placeholder="kullanici_adi" />
+    <label>Sifre <span id="pwHint" class="hidden" style="color:var(--muted)">(en az 8 karakter)</span></label>
+    <input id="password" class="inp" type="password" autocomplete="current-password" placeholder="••••••••" />
+    <button class="btn-primary" id="authBtn" onclick="submitAuth()">Giris Yap</button>
+    <div id="authMsg" class="msg"></div>
+  </div>
+</div>
+
+<!-- =================== ASAMA 1.5: BEKLEME =================== -->
+<div id="waitView" class="center-screen hidden">
+  <div class="card waiting">
+    <div class="pulse"></div>
+    <h2>Kabin Bekleniyor…</h2>
+    <p>Henuz size atanmis bir akilli kabin bulunmuyor.<br/>
+       Lutfen kabin cihazinin kurulum ekrani uzerinden <b>kullanici adinizi</b> girerek
+       eslestirme yapiniz.<br/><br/>
+       <span style="color:var(--accent)">Eslestirme tamamlandiginda bu ekran otomatik olarak panele gececektir.</span></p>
+  </div>
+</div>
+
+<div class="topbar hidden" id="topbar">
+  <span id="whoami"></span>
+  <button onclick="deleteAccount()" class="del">Hesabi Sil</button>
+  <button onclick="logout()">Cikis</button>
+</div>
+
+<!-- =================== ASAMA 2: DASHBOARD =================== -->
+<div id="dashView" class="hidden">
+  <div id="offlineBanner" class="hidden">⚠️ KABIN ILE BAGLANTI KESILDI — Cihaz cevrimdisi, iceride otonom modda calismaya devam ediyor.</div>
+
+  <div class="head">
+    <h1>🌱 <span id="cabinName">Kabin</span></h1>
+    <span class="cabin" id="cabinId"></span>
+    <span class="cabin"><span id="statusDot" class="dot off"></span><span id="statusText">bilinmiyor</span></span>
+  </div>
+
+  <div class="dash">
+    <!-- SOL PANEL -->
+    <div class="panel">
+      <div class="panel-title">⚙️ Otonom Kabin Kontrol Merkezi <span class="tag">WebSocket + REST</span></div>
+
+      <div class="telemetry">
+        <div class="metric" id="m-t"><div class="v">--</div><div class="l">SICAKLIK <span class="u">°C</span></div></div>
+        <div class="metric" id="m-h"><div class="v">--</div><div class="l">NEM <span class="u">%</span></div></div>
+        <div class="metric" id="m-ph"><div class="v">--</div><div class="l">pH</div></div>
+        <div class="metric" id="m-tds"><div class="v">--</div><div class="l">TDS <span class="u">ppm</span></div></div>
+      </div>
+
+      <div class="section">
+        <h3>📈 Sensor Gecmisi (CQRS Query)</h3>
+        <div class="chart-wrap"><canvas id="chart"></canvas></div>
+      </div>
+
+      <div class="section">
+        <h3>🎛️ Manuel Kontrol (ManageActuator)</h3>
+        <div class="acts" id="acts"></div>
+      </div>
+
+      <div class="section">
+        <h3>🧪 Esik & Mod Yapilandirmasi (UpdateCabinConfig)</h3>
+        <div class="grid2">
+          <div class="f"><label>Sicaklik Min</label><input id="cf-tmin" class="inp" type="number" step="0.1"></div>
+          <div class="f"><label>Sicaklik Max</label><input id="cf-tmax" class="inp" type="number" step="0.1"></div>
+          <div class="f"><label>Nem Min</label><input id="cf-hmin" class="inp" type="number" step="0.1"></div>
+          <div class="f"><label>Nem Max</label><input id="cf-hmax" class="inp" type="number" step="0.1"></div>
+          <div class="f"><label>pH Min</label><input id="cf-phmin" class="inp" type="number" step="0.1"></div>
+          <div class="f"><label>pH Max</label><input id="cf-phmax" class="inp" type="number" step="0.1"></div>
+          <div class="f"><label>TDS Min</label><input id="cf-tdsmin" class="inp" type="number" step="1"></div>
+          <div class="f"><label>TDS Max</label><input id="cf-tdsmax" class="inp" type="number" step="1"></div>
+        </div>
+        <div class="switch">
+          <input type="checkbox" id="cf-auto">
+          <label for="cf-auto" style="margin:0">Otonom Mod (cihaz karar motoru aktif)</label>
+        </div>
+        <button class="save-btn" onclick="saveConfig()">Ayarlari Kaydet</button>
+        <div id="cfMsg" class="msg"></div>
+      </div>
+    </div>
+
+    <!-- SAG PANEL -->
+    <div class="panel">
+      <div class="panel-title">🏛️ Sistem Mimarisi & Canli Veri Akisi <span class="tag">Hexagonal · DDD · CQRS</span></div>
+      <div id="mermaid"></div>
+      <div class="legend">
+        <span><i class="lg" style="background:var(--green)"></i> Telemetri (ESP→Broker→Backend)</span>
+        <span><i class="lg" style="background:var(--blue)"></i> Asenkron DB kaydi</span>
+        <span><i class="lg" style="background:var(--orange)"></i> Komut/Config (UI→Backend→Broker→ESP)</span>
+      </div>
+      <ul class="arch-notes">
+        <li><b>Hexagonal (Ports & Adapters):</b> Cekirdek domain dis dunyadan izole; MQTT, HTTP, WebSocket ve PostgreSQL birer <i>adapter</i> olarak port arayuzlerine baglanir.</li>
+        <li><b>DDD:</b> <code>Cabin</code> ve <code>User</code> aggregate'leri, <code>Thresholds</code>/<code>DecisionConfig</code> value object'leri ile invariant'lar (orn. min&lt;max) domain katmaninda zorlanir.</li>
+        <li><b>CQRS-vari ayrim:</b> Yuksek frekansli telemetri Cabin aggregate'inden gecmez; ayri <code>ReadingStore</code> yazma yolu + read-model sorgusu kullanilir.</li>
+        <li><b>Otorite cihazda:</b> Aktuator durumunun tek dogru kaynagi ESP32'nin <code>up/state</code> mesajidir; backend komutu iyimser guncellemez. Internet kopsa kabin otonom karar verir.</li>
+      </ul>
+      <div class="ev-log" id="evlog"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Onay dialogu (hesap silme) -->
+<div id="confirmOverlay" class="overlay hidden">
+  <div class="confirm-card">
+    <h3>Hesabi Sil</h3>
+    <p>Bu islem geri alinamaz. Hesabiniz ve size ait tum kabinler kalici olarak silinecek.</p>
+    <div class="btns">
+      <button class="cancel" onclick="closeConfirm()">Iptal</button>
+      <button class="confirm" onclick="confirmDelete()">Hesabimi Sil</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============== Durum & yardimcilar ============== */
+const API = "";
+let token = localStorage.getItem("hidro_token") || "";
+let mode = "login";
+let cabin = null;        // {id,name,...}
+let decision = null;     // mevcut karar config (merge icin)
+let ws = null;
+let chart = null;
+let pollTimer = null;
+const RELAYS = [["HUMIDIFIER","Nemlendirici"],["HAVA_MOTORU","Su Pompasi"],["COB_LED","COB LED"]];
+const FANS   = [["FAN1","Fan 1"],["FAN2","Fan 2"]];
+
+function $(id){return document.getElementById(id);}
+function show(v){["authView","waitView","dashView"].forEach(x=>$(x).classList.add("hidden"));
+  $(v).classList.remove("hidden"); $("topbar").classList.toggle("hidden", v==="authView");}
+function logEv(t,color){const l=$("evlog");const c={green:"#22c55e",blue:"#3b82f6",orange:"#f59e0b"}[color]||"#8aa0bd";
+  const d=new Date().toLocaleTimeString();l.innerHTML=`<div style="color:${c}">[${d}] ${t}</div>`+l.innerHTML;}
+
+async function api(path,opts={}){
+  opts.headers = Object.assign({"Content-Type":"application/json"}, opts.headers||{});
+  if(token) opts.headers["Authorization"]="Bearer "+token;
+  const r = await fetch(API+path, opts);
+  let body=null; try{body=await r.json();}catch(e){}
+  if(!r.ok){
+    // Oturum ici 401 (token suresi dolmus vb.) -> otomatik cikis.
+    // /auth/* uclarındaki 401 (hatali sifre) haric tutulur.
+    if(r.status===401 && token && !path.startsWith("/auth/")){ logout(); }
+    throw {status:r.status, body};
+  }
+  return body;
+}
+
+/* ============== Hesap silme ============== */
+function deleteAccount(){
+  $("confirmOverlay").classList.remove("hidden");
+}
+function closeConfirm(){
+  $("confirmOverlay").classList.add("hidden");
+}
+async function confirmDelete(){
+  try{
+    await api("/api/account", {method:"DELETE"});
+    logout();
+  }catch(e){
+    alert(e.body?.error || "Islem basarisiz, lutfen tekrar deneyin.");
+  }
+  closeConfirm();
+}
+
+/* ============== ASAMA 1: Auth ============== */
+function setMode(m){mode=m;
+  $("tabLogin").classList.toggle("active",m==="login");
+  $("tabRegister").classList.toggle("active",m==="register");
+  $("authBtn").textContent = m==="login"?"Giris Yap":"Kayit Ol";
+  $("pwHint").classList.toggle("hidden", m!=="register");
+  $("authMsg").textContent="";
+}
+async function submitAuth(){
+  const u=$("username").value.trim(), p=$("password").value;
+  const msg=$("authMsg"); msg.className="msg";
+  if(!u||!p){msg.textContent="Kullanici adi ve sifre gerekli";msg.classList.add("err");return;}
+  try{
+    if(mode==="register"){
+      if(p.length<8){msg.textContent="Sifre en az 8 karakter olmali";msg.classList.add("err");return;}
+      // backend e-posta ister; UI sade olsun diye username'den turetili
+      await api("/auth/register",{method:"POST",body:JSON.stringify({username:u,email:u+"@hidro.local",password:p})});
+      msg.textContent="Kayit basarili, giris yapiliyor…";msg.classList.add("ok");
+    }
+    const res=await api("/auth/login",{method:"POST",body:JSON.stringify({identifier:u,password:p})});
+    token=res.token; localStorage.setItem("hidro_token",token);
+    $("whoami").textContent="👤 "+u;
+    afterLogin();
+  }catch(e){
+    msg.classList.add("err");
+    msg.textContent = e.body?.error || (e.status===401?"Kullanici adi veya sifre hatali":"Islem basarisiz");
+  }
+}
+function logout(){token="";localStorage.removeItem("hidro_token");
+  cabin=null; if(ws){ws.close();ws=null;} if(pollTimer)clearInterval(pollTimer);
+  $("password").value=""; show("authView");}
+
+/* ============== ASAMA 1.5: kabin senkronizasyonu ============== */
+async function afterLogin(){
+  try{
+    const data=await api("/api/cabins");
+    const list=data.cabins||[];
+    if(list.length>0){enterDashboard(list[0]);}
+    else{ show("waitView"); startPolling(); }
+  }catch(e){
+    if(e.status===401){logout();return;}
+    show("waitView"); startPolling();
+  }
+}
+function startPolling(){
+  if(pollTimer)clearInterval(pollTimer);
+  pollTimer=setInterval(async()=>{
+    try{
+      const data=await api("/api/cabins");
+      const list=data.cabins||[];
+      if(list.length>0){clearInterval(pollTimer);pollTimer=null;enterDashboard(list[0]);}
+    }catch(e){ if(e.status===401){clearInterval(pollTimer);logout();} }
+  },4000);
+}
+
+/* ============== ASAMA 2: Dashboard ============== */
+async function enterDashboard(summary){
+  show("dashView");
+  const detail=await api("/api/cabins/"+encodeURIComponent(summary.id));
+  cabin=detail; decision=detail.decision;
+  $("cabinName").textContent=detail.name||"Kabin";
+  $("cabinId").textContent="("+detail.id+")";
+  setOnline(detail.online);
+  fillConfigForm(detail.thresholds, detail.decision);
+  renderActuators(detail.actuators||{});
+  await initChart();
+  initArchitecture();
+  connectWS();
+}
+
+function setOnline(on){
+  $("statusDot").className="dot "+(on?"on":"off");
+  $("statusText").textContent=on?"cevrimici":"cevrimdisi";
+  $("offlineBanner").classList.toggle("hidden",on);
+}
+
+function fmt(v){return (v===null||v===undefined)?"--":(Math.round(v*100)/100);}
+function updateMetric(id,val){const el=$(id);el.querySelector(".v").textContent=fmt(val);
+  el.classList.remove("flash");void el.offsetWidth;el.classList.add("flash");}
+
+/* ---- Aktuatorler ---- */
+function renderActuators(states){
+  const wrap=$("acts");wrap.innerHTML="";
+  RELAYS.forEach(([key,name])=>{
+    const s=states[key]||{on:false}; const on=!!s.on;
+    const d=document.createElement("div");d.className="act";d.id="act-"+key;
+    d.innerHTML=`<div class="name">${name}</div><div class="state">${on?"ACIK":"KAPALI"}</div>
+      <button class="${on?'on':''}" onclick="toggleRelay('${key}')">${on?'Kapat':'Ac'}</button>`;
+    wrap.appendChild(d);
+  });
+  FANS.forEach(([key,name])=>{
+    const s=states[key]||{speed:0}; const sp=s.speed||0;
+    const d=document.createElement("div");d.className="act fan";d.id="act-"+key;
+    d.innerHTML=`<div class="name">${name}</div><div class="state"><span class="spv">${sp}</span>/255</div>
+      <input type="range" min="0" max="255" value="${sp}" oninput="this.closest('.fan').querySelector('.spv').textContent=this.value">
+      <div class="row"><button onclick="sendFan('${key}',this)">Gonder</button></div>`;
+    wrap.appendChild(d);
+  });
+}
+function currentState(key){const el=$("act-"+key);return el?.querySelector(".state")?.textContent;}
+async function toggleRelay(key){
+  const on=currentState(key)==="ACIK"; // tersine cevir
+  try{ await api(`/api/cabins/${cabin.id}/command`,{method:"POST",body:JSON.stringify({actuator:key,state:!on})});
+    glowDown(); logEv(`Komut → ${key} = ${!on?'AC':'KAPAT'}`,"orange");
+  }catch(e){ logEv("Komut hatasi: "+(e.body?.error||e.status),"orange"); }
+}
+async function sendFan(key,btn){
+  const sp=parseInt(btn.closest(".fan").querySelector("input").value,10);
+  try{ await api(`/api/cabins/${cabin.id}/command`,{method:"POST",body:JSON.stringify({actuator:key,speed:sp})});
+    glowDown(); logEv(`Komut → ${key} hiz = ${sp}`,"orange");
+  }catch(e){ logEv("Komut hatasi: "+(e.body?.error||e.status),"orange"); }
+}
+
+/* ---- Config formu ---- */
+function fillConfigForm(t,d){
+  $("cf-tmin").value=t.sicaklikMin; $("cf-tmax").value=t.sicaklikMax;
+  $("cf-hmin").value=t.nemMin; $("cf-hmax").value=t.nemMax;
+  $("cf-phmin").value=t.phMin; $("cf-phmax").value=t.phMax;
+  $("cf-tdsmin").value=t.tdsMin; $("cf-tdsmax").value=t.tdsMax;
+  $("cf-auto").checked=!!d.otomatikMod;
+}
+async function saveConfig(){
+  const msg=$("cfMsg");msg.className="msg";
+  const tmax=parseFloat($("cf-tmax").value), hmax=parseFloat($("cf-hmax").value);
+  // KritikMax >= max invariant'ini koru (mevcut degerden buyuk tut)
+  const thresholds={
+    sicaklikMin:parseFloat($("cf-tmin").value), sicaklikMax:tmax,
+    sicaklikKritikMax:Math.max(cabin.thresholds.sicaklikKritikMax, tmax+1),
+    nemMin:parseFloat($("cf-hmin").value), nemMax:hmax,
+    nemKritikMax:Math.max(cabin.thresholds.nemKritikMax, hmax+1),
+    tdsMin:parseFloat($("cf-tdsmin").value), tdsMax:parseFloat($("cf-tdsmax").value),
+    phMin:parseFloat($("cf-phmin").value), phMax:parseFloat($("cf-phmax").value),
+  };
+  const dec=Object.assign({},decision,{otomatikMod:$("cf-auto").checked});
+  try{
+    const updated=await api(`/api/cabins/${cabin.id}/config`,{method:"PUT",
+      body:JSON.stringify({thresholds,decision:dec})});
+    cabin.thresholds=updated.thresholds; cabin.decision=updated.decision; decision=updated.decision;
+    msg.textContent="✓ Ayarlar kaydedildi ve cihaza gonderildi"; msg.classList.add("ok");
+    glowDown(); logEv("Config → cihaza gonderildi","orange");
+  }catch(e){ msg.classList.add("err"); msg.textContent=e.body?.error||"Kaydetme basarisiz"; }
+}
+
+/* ---- Grafik (Chart.js) ---- */
+async function initChart(){
+  let readings=[];
+  try{
+    const r=await api(`/api/cabins/${cabin.id}/readings?limit=80&bucket=raw`);
+    readings=(r.readings||[]).slice().reverse();
+  }catch(e){}
+  const labels=readings.map(x=>new Date(x.ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}));
+  const temp=readings.map(x=>x.t), hum=readings.map(x=>x.h);
+  const ctx=$("chart").getContext("2d");
+  if(chart)chart.destroy();
+  chart=new Chart(ctx,{type:"line",
+    data:{labels,datasets:[
+      {label:"Sicaklik °C",data:temp,borderColor:"#38bdf8",backgroundColor:"rgba(56,189,248,.15)",tension:.3,fill:true,pointRadius:0},
+      {label:"Nem %",data:hum,borderColor:"#22c55e",backgroundColor:"rgba(34,197,94,.12)",tension:.3,fill:true,pointRadius:0},
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{intersect:false},
+      plugins:{legend:{labels:{color:"#8aa0bd",boxWidth:12}}},
+      scales:{x:{ticks:{color:"#8aa0bd",maxTicksLimit:6},grid:{color:"#1c2840"}},
+              y:{ticks:{color:"#8aa0bd"},grid:{color:"#1c2840"}}}}});
+}
+function pushReading(rd){
+  if(!chart)return;
+  chart.data.labels.push(new Date(rd.ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}));
+  chart.data.datasets[0].data.push(rd.t); chart.data.datasets[1].data.push(rd.h);
+  if(chart.data.labels.length>80){chart.data.labels.shift();chart.data.datasets.forEach(d=>d.data.shift());}
+  chart.update("none");
+}
+
+/* ---- WebSocket ---- */
+function connectWS(){
+  if(!cabin){return;}                 // cikis yapilmissa baglanma
+  if(ws){ws.onclose=null;ws.close();} // eski soketi sustur (cift reconnect engellenir)
+  const proto=location.protocol==="https:"?"wss":"ws";
+  const url=`${proto}://${location.host}/ws?token=${encodeURIComponent(token)}&cabin_id=${encodeURIComponent(cabin.id)}`;
+  ws=new WebSocket(url);
+  ws.onopen=()=>logEv("WebSocket baglandi","green");
+  ws.onclose=()=>{logEv("WebSocket kapandi, 3s sonra yeniden…","orange");
+    setTimeout(()=>{if(cabin)connectWS();},3000);};
+  ws.onmessage=(m)=>{
+    let ev; try{ev=JSON.parse(m.data);}catch(e){return;}
+    handleEvent(ev);
+  };
+}
+function handleEvent(ev){
+  const d=ev.data||{};
+  if(ev.type==="reading"){
+    updateMetric("m-t",d.t);updateMetric("m-h",d.h);updateMetric("m-ph",d.ph);updateMetric("m-tds",d.tds);
+    setOnline(true); pushReading(d);
+    glowUp();                       // ESP→Broker→Backend yesil
+    setTimeout(glowDB,500);         // Backend→Postgres mavi
+    logEv(`Telemetri: ${fmt(d.t)}°C / ${fmt(d.h)}% / pH ${fmt(d.ph)} / ${fmt(d.tds)}ppm`,"green");
+  }else if(ev.type==="state"){
+    renderActuators(d); setOnline(true);
+    glowUp(); logEv("Aktuator durumu guncellendi (up/state)","green");
+  }else if(ev.type==="status"){
+    setOnline(!!d.online);
+    logEv("Durum: "+(d.online?"cevrimici":"CEVRIMDISI (LWT)"), d.online?"green":"orange");
+  }else if(ev.type==="alert"){
+    logEv(`⚠️ ${d.type}: ${d.msg}`,"orange");
+  }
+}
+
+/* ---- Mimari diyagram + animasyon ---- */
+const MERMAID_DEF=`flowchart LR
+  ESP["🌱 ESP32 Kabin<br/>Firmware · Otonom Karar"]
+  BROKER["📡 Mosquitto<br/>MQTT Broker"]
+  BACKEND["⚙️ Go Backend<br/>Hexagonal · DDD"]
+  DB[("🗄️ PostgreSQL<br/>Time-series + Aggregate")]
+  UI["🖥️ Web UI<br/>bu ekran"]
+  ESP -->|"up/sensors · up/state"| BROKER
+  BROKER -->|"subscribe"| BACKEND
+  BACKEND -->|"INSERT readings"| DB
+  BACKEND -->|"WebSocket broadcast"| UI
+  UI -->|"REST komut/config"| BACKEND
+  BACKEND -->|"down/command · down/config"| BROKER
+  BROKER -->|"down/*"| ESP`;
+async function initArchitecture(){
+  mermaid.initialize({startOnLoad:false,theme:"dark",securityLevel:"loose",
+    themeVariables:{primaryColor:"#16233c",lineColor:"#5d7290",primaryTextColor:"#e6edf6",
+      primaryBorderColor:"#2b3d5c",fontSize:"13px"}});
+  try{
+    const {svg}=await mermaid.render("archGraph", MERMAID_DEF);
+    $("mermaid").innerHTML=svg;
+  }catch(e){ $("mermaid").innerHTML="<div style='color:var(--muted)'>Diyagram yuklenemedi (internet?)</div>"; }
+}
+function glowNodes(names,color){
+  const svg=$("mermaid").querySelector("svg"); if(!svg)return;
+  svg.querySelectorAll(".node").forEach(n=>{
+    const label=(n.textContent||"").replace(/\s+/g," ");
+    if(names.some(x=>label.includes(x))){
+      n.classList.add("glow-"+color);
+      setTimeout(()=>n.classList.remove("glow-"+color),1200);
+    }
+  });
+}
+function glowUp(){ glowNodes(["ESP32","Mosquitto","Go Backend"],"green"); }
+function glowDB(){ glowNodes(["PostgreSQL"],"blue"); }
+function glowDown(){ glowNodes(["Web UI","Go Backend","Mosquitto","ESP32"],"orange"); }
+
+/* ============== Baslangic ============== */
+(function init(){
+  setMode("login");
+  if(token){ $("whoami").textContent="👤"; afterLogin(); }
+  else show("authView");
+})();
+</script>
+</body>
+</html>

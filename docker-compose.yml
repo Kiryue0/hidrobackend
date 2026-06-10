@@ -1,0 +1,33 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: hidro-postgres
+    environment:
+      POSTGRES_USER: hidro
+      POSTGRES_PASSWORD: hidro
+      POSTGRES_DB: hidro
+    ports:
+      - "5432:5432"
+    volumes:
+      - hidro-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hidro -d hidro"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: hidro-mosquitto
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./deploy/mosquitto/config:/mosquitto/config
+      - hidro-mqttdata:/mosquitto/data
+      - hidro-mqttlog:/mosquitto/log
+
+volumes:
+  hidro-pgdata:
+  hidro-mqttdata:
+  hidro-mqttlog:
