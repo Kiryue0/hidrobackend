@@ -91,11 +91,25 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("JWT_SECRET zorunlu")
 	}
 
-	// Railway $PORT enjekte eder; HTTP_PORT tanımlı değilse PORT'u kullan
-	if cfg.HTTPPort == "" || cfg.HTTPPort == "8080" {
-		if p := os.Getenv("PORT"); p != "" {
-			cfg.HTTPPort = p
-		}
+	// Railway / prod ortam değişkenleri: viper AutomaticEnv tutarsız olabiliyor,
+	// bu yüzden kritik değişkenleri doğrudan os.Getenv ile okuyup varsayılanı eziyoruz.
+	if v := os.Getenv("DATABASE_URL"); v != "" {
+		cfg.DatabaseURL = v
+	}
+	if v := os.Getenv("PORT"); v != "" {
+		cfg.HTTPPort = v
+	}
+	if v := os.Getenv("MQTT_BROKER"); v != "" {
+		cfg.MQTTBroker = v
+	}
+	if v := os.Getenv("MQTT_USERNAME"); v != "" {
+		cfg.MQTTUsername = v
+	}
+	if v := os.Getenv("MQTT_PASSWORD"); v != "" {
+		cfg.MQTTPassword = v
+	}
+	if v := os.Getenv("JWT_SECRET"); v != "" {
+		cfg.JWTSecret = v
 	}
 
 	return &cfg, nil
