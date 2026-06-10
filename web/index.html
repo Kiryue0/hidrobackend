@@ -87,6 +87,15 @@
   .fan input[type=range]{width:100%}
   .fan .row{display:flex;gap:6px;align-items:center;margin-top:6px}
   .fan .row button{flex:0 0 auto;padding:8px 10px}
+  .act button:disabled{background:#151e2e !important;color:#3d5068 !important;cursor:not-allowed;opacity:.7}
+  .act .mode-badge{font-size:10px;color:var(--accent);margin:3px 0 4px;letter-spacing:.2px}
+  .danger-zone{margin-top:22px;border:1px solid rgba(239,68,68,.35);border-radius:10px;padding:16px}
+  .danger-zone h4{font-size:11px;font-weight:700;color:var(--red);text-transform:uppercase;
+        letter-spacing:.6px;margin-bottom:8px}
+  .danger-zone p{font-size:12px;color:var(--muted);margin:0 0 12px;line-height:1.5}
+  .btn-danger{padding:9px 18px;border:1px solid var(--red);border-radius:8px;background:transparent;
+        color:var(--red);font-weight:700;font-size:13px;transition:background .15s,color .15s}
+  .btn-danger:hover{background:var(--red);color:#fff}
 
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .grid2 .f label{margin-top:8px}
@@ -164,8 +173,7 @@
 
 <div class="topbar hidden" id="topbar">
   <span id="whoami"></span>
-  <button onclick="deleteAccount()" class="del">Hesabi Sil</button>
-  <button onclick="logout()">Cikis</button>
+  <button onclick="logout()">Cikis Yap</button>
 </div>
 
 <!-- =================== ASAMA 2: DASHBOARD =================== -->
@@ -216,8 +224,28 @@
           <input type="checkbox" id="cf-auto">
           <label for="cf-auto" style="margin:0">Otonom Mod (cihaz karar motoru aktif)</label>
         </div>
+        <div class="section">
+          <h3>💧 Su Pompasi Modu</h3>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <select id="cf-pompamod" class="inp" style="flex:1" onchange="toggleDonguSureleri()">
+              <option value="0">Manuel (UI'dan ac/kapat)</option>
+              <option value="1">Surekli (hep acik)</option>
+              <option value="2">Dongu (aralikli calis)</option>
+            </select>
+          </div>
+          <div class="grid2" id="donguSureleri" style="margin-top:8px">
+            <div class="f"><label>Acik Sure (sn)</label><input id="cf-aciksn" class="inp" type="number" step="1" min="1"></div>
+            <div class="f"><label>Kapali Sure (sn)</label><input id="cf-kapalisn" class="inp" type="number" step="1" min="1"></div>
+          </div>
+        </div>
         <button class="save-btn" onclick="saveConfig()">Ayarlari Kaydet</button>
         <div id="cfMsg" class="msg"></div>
+      </div>
+
+      <div class="danger-zone">
+        <h4>⚠️ Tehlikeli Bolge</h4>
+        <p>Hesabiniz ve size ait tum kabinler kalici olarak silinecek.<br>Bu islem geri alinamaz.</p>
+        <button class="btn-danger" onclick="deleteAccount()">Hesabi Sil</button>
       </div>
     </div>
 
@@ -260,6 +288,7 @@ let token = localStorage.getItem("hidro_token") || "";
 let mode = "login";
 let cabin = null;        // {id,name,...}
 let decision = null;     // mevcut karar config (merge icin)
+let actuatorStates = {}; // son bilinen aktuator durumu (re-render icin)
 let ws = null;
 let chart = null;
 let pollTimer = null;
@@ -331,9 +360,11 @@ async function submitAuth(){
     msg.textContent = e.body?.error || (e.status===401?"Kullanici adi veya sifre hatali":"Islem basarisiz");
   }
 }
-function logout(){token="";localStorage.removeItem("hidro_token");
-  cabin=null; if(ws){ws.close();ws=null;} if(pollTimer)clearInterval(pollTimer);
-  $("password").value=""; show("authView");}
+function logout(){
+  token=""; localStorage.removeItem("hidro_token");
+  if(ws){ws.onclose=null;ws.close();ws=null;} if(pollTimer)clearInterval(pollTimer);
+  location.reload();
+}
 
 /* ============== ASAMA 1.5: kabin senkronizasyonu ============== */
 async function afterLogin(){
@@ -385,13 +416,27 @@ function updateMetric(id,val){const el=$(id);el.querySelector(".v").textContent=
 
 /* ---- Aktuatorler ---- */
 function renderActuators(states){
+  actuatorStates = states;
   const wrap=$("acts");wrap.innerHTML="";
   RELAYS.forEach(([key,name])=>{
     const s=states[key]||{on:false}; const on=!!s.on;
-    const d=document.createElement("div");d.className="act";d.id="act-"+key;
-    d.innerHTML=`<div class="name">${name}</div><div class="state">${on?"ACIK":"KAPALI"}</div>
+    const el=document.createElement("div");el.className="act";el.id="act-"+key;
+    let modeBadge="", btnDisabled=false, btnTooltip="";
+    if(key==="HAVA_MOTORU" && decision){
+      const mod=decision.havaMotoruMod??1;
+      if(mod!==0){
+        btnDisabled=true;
+        const mn=mod===1?"Surekli":"Dongu";
+        btnTooltip=`${mn} modda cihaz otomatik yonetir`;
+        modeBadge=`<div class="mode-badge">◉ ${mn} Mod</div>`;
+      }
+    }
+    el.innerHTML=`<div class="name">${name}</div>
+      <div class="state" style="color:${on?'var(--green)':'var(--muted)'}">${on?"ACIK":"KAPALI"}</div>
+      ${modeBadge}
       <button class="${on?'on':''}" onclick="toggleRelay('${key}')">${on?'Kapat':'Ac'}</button>`;
-    wrap.appendChild(d);
+    if(btnDisabled){const b=el.querySelector("button");b.disabled=true;b.title=btnTooltip;}
+    wrap.appendChild(el);
   });
   FANS.forEach(([key,name])=>{
     const s=states[key]||{speed:0}; const sp=s.speed||0;
@@ -423,6 +468,13 @@ function fillConfigForm(t,d){
   $("cf-phmin").value=t.phMin; $("cf-phmax").value=t.phMax;
   $("cf-tdsmin").value=t.tdsMin; $("cf-tdsmax").value=t.tdsMax;
   $("cf-auto").checked=!!d.otomatikMod;
+  $("cf-pompamod").value=d.havaMotoruMod!==undefined?d.havaMotoruMod:1;
+  $("cf-aciksn").value = d.havaAcikSn!==undefined ? d.havaAcikSn : 900;
+  $("cf-kapalisn").value = d.havaKapaliSn!==undefined ? d.havaKapaliSn : 900;
+  toggleDonguSureleri();
+}
+function toggleDonguSureleri(){
+  $("donguSureleri").style.display = (+$("cf-pompamod").value===2) ? "" : "none";
 }
 async function saveConfig(){
   const msg=$("cfMsg");msg.className="msg";
@@ -436,11 +488,17 @@ async function saveConfig(){
     tdsMin:parseFloat($("cf-tdsmin").value), tdsMax:parseFloat($("cf-tdsmax").value),
     phMin:parseFloat($("cf-phmin").value), phMax:parseFloat($("cf-phmax").value),
   };
-  const dec=Object.assign({},decision,{otomatikMod:$("cf-auto").checked});
+  const dec=Object.assign({},decision,{
+    otomatikMod:$("cf-auto").checked,
+    havaMotoruMod:+$("cf-pompamod").value,
+    havaAcikSn:+$("cf-aciksn").value,
+    havaKapaliSn:+$("cf-kapalisn").value,
+  });
   try{
     const updated=await api(`/api/cabins/${cabin.id}/config`,{method:"PUT",
       body:JSON.stringify({thresholds,decision:dec})});
     cabin.thresholds=updated.thresholds; cabin.decision=updated.decision; decision=updated.decision;
+    renderActuators(actuatorStates); // pompa mod degistiyse buton durumunu guncelle
     msg.textContent="✓ Ayarlar kaydedildi ve cihaza gonderildi"; msg.classList.add("ok");
     glowDown(); logEv("Config → cihaza gonderildi","orange");
   }catch(e){ msg.classList.add("err"); msg.textContent=e.body?.error||"Kaydetme basarisiz"; }

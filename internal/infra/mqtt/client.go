@@ -22,6 +22,11 @@ func needsTLS(brokerURL string) bool {
 	}
 }
 
+// connectTimeout ilk bağlantı denemesi için maksimum bekleme süresi.
+// Bu süre içinde broker'a ulaşılamazsa uygulama yine de başlar;
+// AutoReconnect + ConnectRetry arka planda yeniden dener.
+const connectTimeout = 30 * time.Second
+
 // baseClientOptions ortak paho yapılandırmasını üretir.
 // tls:// şeması algılanırsa sistem kök sertifikalarıyla TLS aktifleştirir.
 func baseClientOptions(cfg Config) *paho.ClientOptions {

@@ -26,11 +26,14 @@ func NewPublisher(cfg Config) *Publisher {
 	return &Publisher{client: paho.NewClient(opts)}
 }
 
-// Start broker'a bağlanır.
+// Start broker'a bağlanır. connectTimeout içinde bağlanamazsa arka plana bırakır.
 func (p *Publisher) Start() error {
 	token := p.client.Connect()
-	token.Wait()
-	return token.Error()
+	if token.WaitTimeout(connectTimeout) {
+		return token.Error()
+	}
+	// Timeout: broker şu an erişilemez. AutoReconnect arka planda yeniden dener.
+	return nil
 }
 
 // Stop bağlantıyı kapatır.

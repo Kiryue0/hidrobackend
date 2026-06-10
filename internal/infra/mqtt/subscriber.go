@@ -78,10 +78,11 @@ func (s *Subscriber) Start(ctx context.Context) error {
 	}
 
 	token := s.client.Connect()
-	token.Wait()
-	if err := token.Error(); err != nil {
-		return err
+	if token.WaitTimeout(connectTimeout) {
+		return token.Error()
 	}
+	// Timeout: broker şu an erişilemez. ConnectRetry+AutoReconnect arka planda yeniden dener.
+	s.log.Warn("mqtt ilk bağlantı zaman aşımı, arka planda yeniden deneniyor")
 	return nil
 }
 

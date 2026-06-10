@@ -1,0 +1,28 @@
+# fly.toml — HidroBackend
+# Düzenle: app adını kendi app adınla değiştir.
+
+app = "hidro-backend"
+primary_region = "fra"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  MIGRATIONS_DIR = "/app/migrations"
+  WEB_DIR        = "/app/web"
+
+[http_service]
+  internal_port = 8080
+  force_https   = true
+  auto_stop_machines  = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type       = "requests"
+    soft_limit = 200
+    hard_limit = 250
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
